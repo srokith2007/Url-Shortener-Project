@@ -9,6 +9,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from .limiter import limiter
 from app.redis_client import redis_client
+import time
+from fastapi import Request
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,3 +38,18 @@ app.add_exception_handler(
 app.add_middleware(SlowAPIMiddleware)
 
 print(redis_client.ping())
+
+@app.middleware("http")
+async def process_time(request: Request, call_next):
+    start = time.perf_counter()
+
+    response = await call_next(request)
+
+    elapsed = (time.perf_counter() - start) * 1000
+
+    print(
+        f"{request.method} {request.url.path} "
+        f"-> API Time: {elapsed:.2f} ms"
+    )
+
+    return response

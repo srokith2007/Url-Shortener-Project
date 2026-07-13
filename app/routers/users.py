@@ -1,10 +1,15 @@
-from fastapi import FastAPI,status,Response,HTTPException,Depends,APIRouter,Request
+from fastapi import FastAPI,status,Response,HTTPException,Depends,APIRouter,Request,BackgroundTasks
 from typing import List
 from app import models,schemas,utils
 from ..database import engine,get_db
 from sqlalchemy.orm import Session
 from .. import oauth2
 from .. limiter import limiter
+from app.email.service import send_email
+from app.email.templates import verification_email
+from app.oauth2 import create_email_verification_token
+from app.configs import settings
+
 router = APIRouter(
     prefix = "/users",
     tags = ["Users"]
@@ -13,9 +18,8 @@ router = APIRouter(
 #register user
 @router.post("/register",status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut)
 @limiter.limit("5/minute")
-def create_user(request: Request, user:schemas.UserCreate, db : Session = Depends(get_db)):
-
-    new_user = models.User(**user.model_dump())
+def create_user(request: Request, background_tasks: BackgroundTasks, user:schemas.UserCreate, db : Session = Depends(get_db)):
+    
     user_duplication_check_username = db.query(models.User).filter(models.User.username==user.username).first()
     if user_duplication_check_username:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username already exists")
@@ -24,10 +28,15 @@ def create_user(request: Request, user:schemas.UserCreate, db : Session = Depend
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email_id already exists")
     hashed_password = utils.hash(user.password)
     user.password = hashed_password
+    new_user = models.User(**user.model_dump())
     print(new_user)
     db.add( new_user)
     db.commit()
     db.refresh( new_user)
+    token = create_email_verification_token(new_user.email_id)
+    link = f"{settings.base_url}/auth/verify-email?token={token}"
+    body = verification_email(name=new_user.username,verification_link=link)
+    background_tasks.add_task(send_email,recipients=[new_user.email_id],subject="Verify your email",body=body)
     return  new_user
 
 

@@ -10,6 +10,7 @@ from datetime import datetime,UTC
 from .. import oauth2
 from .. limiter import limiter
 from app.cache.url_cache import get_cached_url, cache_url, delete_cached_url
+from app.monitoring.timer import Timer
 
 
 router = APIRouter(
@@ -18,22 +19,25 @@ router = APIRouter(
 )
 
 
-@router.get("/")
-def get_all_urls(request: Request, db: Session = Depends(get_db)):
-    urls = db.query(models.Urls).all()
-    return urls
 
 @router.get("/{short_code}", status_code=status.HTTP_302_FOUND)
 @limiter.limit("10/minute")
 def get_url(request: Request, short_code: str, db : Session = Depends(get_db)):
     #url cached in redis
-    cached_url = get_cached_url(short_code)
+    #Timer() for response time in redis
+    with Timer() as redis_timer:
+        cached_url = get_cached_url(short_code)
+    print(f"Redis Time: {redis_timer.elapsed:.2f} ms")
     if cached_url:
         print("✅ CACHE HIT")
         return RedirectResponse(cached_url)
-    
     print("❌ CACHE MISS")
-    url = db.query(models.Urls).filter(models.Urls.short_code==short_code).first()
+
+    #Timer() for response time in database
+    with Timer() as db_timer:
+        url = db.query(models.Urls).filter(models.Urls.short_code == short_code).first()
+    print(f"DB Time: {db_timer.elapsed:.2f} ms")
+
     if not url:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"url {short_code} not found")
     if url.expires_at and url.expires_at < datetime.now(UTC):

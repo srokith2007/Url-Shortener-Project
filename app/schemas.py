@@ -40,3 +40,11 @@ class UserOut(BaseModel):
 
 class TokenData(BaseModel):
     id : Optional[int]
+
+class ForgotPassword(BaseModel):
+    email_id: EmailStr
+
+
+class ResetPassword(BaseModel):
+    token: str
+    new_password: str

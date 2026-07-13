@@ -45,3 +45,79 @@ def get_current_user(token:str = Depends(oauth2_scheme), db: Session = Depends(g
     if user is None:
         raise credentials_exception
     return user
+
+def create_email_verification_token(email: str):
+    payload = {
+        "sub": email,
+        "type": "email_verification",
+        "exp": datetime.now(UTC) + timedelta(minutes=15)
+    }
+
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+
+def verify_email_verification_token(token: str):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired verification token"
+    )
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        if payload.get("type") != "email_verification":
+            raise credentials_exception
+
+        email = payload.get("sub")
+
+        if email is None:
+            raise credentials_exception
+
+        return email
+
+    except JWTError:
+        raise credentials_exception
+
+
+def create_password_reset_token(email: str):
+    payload = {
+        "sub": email,
+        "type": "password_reset",
+        "exp": datetime.now(UTC) + timedelta(minutes=15)
+    }
+
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+
+def verify_password_reset_token(token: str):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired verification token"
+    )
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        if payload.get("type") != "password_reset":
+            raise credentials_exception
+
+        email = payload.get("sub")
+
+        if email is None:
+            raise credentials_exception
+
+        return email
+
+    except JWTError:
+        raise credentials_exception
+
